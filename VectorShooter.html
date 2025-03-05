@@ -60,10 +60,92 @@
             dx: 0,
             bullets: [],
             lives: PlayerConfig.lives,
-            invulnerable: false
+            invulnerable: false,
+            maxBullets: 3  // Maximum number of bullets allowed on screen
         };
 
         const enemies = [];
+        const explosions = [];  // Array to store active explosions
+
+        // Explosion piece class
+        class ExplosionPiece {
+            constructor(x, y, type, pieceIndex, totalPieces) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.pieceIndex = pieceIndex;
+                this.totalPieces = totalPieces;
+                this.angle = (pieceIndex / totalPieces) * Math.PI * 2;
+                this.rotation = 0;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.2;
+                this.speed = 2 + Math.random() * 2;
+                this.size = type.size;
+                this.life = 1.0; // Life from 1 to 0
+                this.decayRate = 0.02 + Math.random() * 0.02;
+            }
+
+            update() {
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+                this.rotation += this.rotationSpeed;
+                this.life -= this.decayRate;
+                return this.life > 0;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.globalAlpha = this.life;
+
+                switch(this.type.name) {
+                    case 'Diamond':
+                        // Draw diamond piece
+                        ctx.beginPath();
+                        ctx.strokeStyle = this.type.color;
+                        const diamondAngle = (Math.PI * 2) / this.totalPieces;
+                        ctx.moveTo(0, -this.size);
+                        ctx.lineTo(this.size * Math.cos(diamondAngle), this.size * Math.sin(diamondAngle));
+                        ctx.lineTo(0, 0);
+                        ctx.closePath();
+                        ctx.stroke();
+                        break;
+
+                    case 'Circle':
+                        // Draw circle arc piece
+                        ctx.beginPath();
+                        ctx.strokeStyle = this.type.color;
+                        const arcAngle = (Math.PI * 2) / this.totalPieces;
+                        ctx.arc(0, 0, this.size, 0, arcAngle);
+                        ctx.stroke();
+                        break;
+
+                    case 'Square':
+                        // Draw square piece
+                        ctx.beginPath();
+                        ctx.strokeStyle = this.type.color;
+                        const squareAngle = (Math.PI * 2) / this.totalPieces;
+                        ctx.moveTo(-this.size, -this.size);
+                        ctx.lineTo(this.size * Math.cos(squareAngle), this.size * Math.sin(squareAngle));
+                        ctx.lineTo(0, 0);
+                        ctx.closePath();
+                        ctx.stroke();
+                        break;
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // Create explosion
+        function createExplosion(x, y, enemyType) {
+            const pieces = [];
+            const numPieces = enemyType.name === 'Circle' ? 8 : 4; // More pieces for circle
+            for(let i = 0; i < numPieces; i++) {
+                pieces.push(new ExplosionPiece(x, y, enemyType, i, numPieces));
+            }
+            explosions.push(pieces);
+        }
 
         // Game loop
         function gameLoop() {
@@ -168,6 +250,9 @@
                         score += enemy.type.points;
                         enemiesEliminated++;
                         
+                        // Add explosion
+                        createExplosion(enemy.x, enemy.y, enemy.type);
+                        
                         // Check if level is complete
                         if (enemiesEliminated >= currentLevelConfig.enemiesToEliminate) {
                             // Calculate next level with increasing difficulty
@@ -203,6 +288,17 @@
                 enemy.type.draw(ctx, enemy.x, enemy.y, enemy.type.size);
             }
 
+            // Update and draw explosions
+            for(let i = explosions.length - 1; i >= 0; i--) {
+                const explosion = explosions[i];
+                const alivePieces = explosion.filter(piece => piece.update());
+                if(alivePieces.length === 0) {
+                    explosions.splice(i, 1);
+                } else {
+                    explosion.forEach(piece => piece.draw(ctx));
+                }
+            }
+
             // Update game info display
             gameInfo.textContent = `Level: ${currentLevel + 1} | Score: ${score} | Lives: ${player.lives} | Enemies: ${enemiesEliminated}/${currentLevelConfig.enemiesToEliminate}`;
 
@@ -225,7 +321,7 @@
             if (gameOver) return;
             if(e.key === 'ArrowLeft') player.dx = -PlayerConfig.speed;
             if(e.key === 'ArrowRight') player.dx = PlayerConfig.speed;
-            if(e.key === ' ') {
+            if(e.key === ' ' && player.bullets.length < player.maxBullets) {
                 player.bullets.push({
                     x: player.x,
                     y: player.y
