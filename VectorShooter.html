@@ -7,29 +7,59 @@
             border: 1px solid #333;
             background: black;
         }
+        #gameInfo {
+            color: white;
+            font-family: Arial;
+            margin: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #000;
+        }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="gameInfo">Level: 1 | Score: 0 | Lives: 3 | Enemies: 0/10</div>
+    <canvas id="gameCanvas" width="1024" height="768"></canvas>
 
+    <script src="gameObjects.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const gameInfo = document.getElementById('gameInfo');
+
+        // Game state
+        let currentLevel = 0;
+        let enemiesEliminated = 0;
+        let score = 0;
+        let gameOver = false;
 
         // Game objects
         const player = {
             x: canvas.width/2,
             y: canvas.height-30,
-            size: 20,
+            size: PlayerConfig.size,
             dx: 0,
             bullets: [],
-            lives: 3,
+            lives: PlayerConfig.lives,
             invulnerable: false
         };
 
         const enemies = [];
-        let score = 0;
-        let gameOver = false;
 
         // Game loop
         function gameLoop() {
@@ -63,7 +93,7 @@
             // Update and draw bullets
             for(let i = player.bullets.length-1; i >= 0; i--) {
                 const bullet = player.bullets[i];
-                bullet.y -= 10;
+                bullet.y -= PlayerConfig.bulletSpeed;
                 
                 // Remove bullets that are off screen
                 if(bullet.y < 0) {
@@ -79,35 +109,47 @@
                 ctx.stroke();
             }
 
-            // Spawn enemies
-            if(Math.random() < 0.02) {
+            // Spawn enemies based on current level
+            const currentLevelConfig = Levels[currentLevel];
+            if(Math.random() < currentLevelConfig.spawnRate) {
+                // Ensure we have a valid enemy type
+                if (!currentLevelConfig || !currentLevelConfig.enemyType) {
+                    console.error('Invalid level configuration or enemy type');
+                    return;
+                }
                 enemies.push({
                     x: Math.random() * canvas.width,
                     y: 0,
-                    size: 15
+                    type: currentLevelConfig.enemyType
                 });
             }
 
             // Update and draw enemies
             for(let i = enemies.length-1; i >= 0; i--) {
                 const enemy = enemies[i];
-                enemy.y += 2;
+                // Add safety check for enemy type
+                if (!enemy || !enemy.type) {
+                    console.error('Invalid enemy object:', enemy);
+                    enemies.splice(i, 1);
+                    continue;
+                }
+                enemy.y += enemy.type.speed;
 
                 // Check collision with player
                 if (!player.invulnerable && 
-                    Math.abs(player.x - enemy.x) < (player.size + enemy.size)/2 &&
-                    Math.abs(player.y - enemy.y) < (player.size + enemy.size)/2) {
+                    Math.abs(player.x - enemy.x) < (player.size + enemy.type.size)/2 &&
+                    Math.abs(player.y - enemy.y) < (player.size + enemy.type.size)/2) {
                     player.lives--;
                     enemies.splice(i, 1);
                     
                     if (player.lives <= 0) {
                         gameOver = true;
                     } else {
-                        // Make player invulnerable for 2 seconds
+                        // Make player invulnerable
                         player.invulnerable = true;
                         setTimeout(() => {
                             player.invulnerable = false;
-                        }, 2000);
+                        }, PlayerConfig.invulnerableTime);
                     }
                     continue;
                 }
@@ -115,11 +157,24 @@
                 // Check collision with bullets
                 for(let j = player.bullets.length-1; j >= 0; j--) {
                     const bullet = player.bullets[j];
-                    if(Math.abs(bullet.x - enemy.x) < enemy.size &&
-                       Math.abs(bullet.y - enemy.y) < enemy.size) {
+                    if(Math.abs(bullet.x - enemy.x) < enemy.type.size &&
+                       Math.abs(bullet.y - enemy.y) < enemy.type.size) {
                         enemies.splice(i, 1);
                         player.bullets.splice(j, 1);
-                        score += 100;
+                        score += enemy.type.points;
+                        enemiesEliminated++;
+                        
+                        // Check if level is complete
+                        if (enemiesEliminated >= currentLevelConfig.enemiesToEliminate) {
+                            if (currentLevel < Levels.length - 1) {
+                                currentLevel++;
+                                enemiesEliminated = 0;
+                                enemies.length = 0; // Clear remaining enemies
+                            } else {
+                                // Game completed
+                                gameOver = true;
+                            }
+                        }
                         break;
                     }
                 }
@@ -130,22 +185,12 @@
                     continue;
                 }
 
-                // Draw enemy (diamond shape)
-                ctx.beginPath();
-                ctx.strokeStyle = 'red';
-                ctx.moveTo(enemy.x, enemy.y - enemy.size);
-                ctx.lineTo(enemy.x + enemy.size, enemy.y);
-                ctx.lineTo(enemy.x, enemy.y + enemy.size);
-                ctx.lineTo(enemy.x - enemy.size, enemy.y);
-                ctx.closePath();
-                ctx.stroke();
+                // Draw enemy using its type's draw function
+                enemy.type.draw(ctx, enemy.x, enemy.y, enemy.type.size);
             }
 
-            // Draw score
-            ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
-            ctx.fillText(`Score: ${score}`, 10, 30);
-            ctx.fillText(`Lives: ${player.lives}`, 10, 60);
+            // Update game info display
+            gameInfo.textContent = `Level: ${currentLevel + 1} | Score: ${score} | Lives: ${player.lives} | Enemies: ${enemiesEliminated}/${currentLevelConfig.enemiesToEliminate}`;
 
             // Draw player with blinking effect when invulnerable
             if (!player.invulnerable || Math.floor(Date.now() / 100) % 2) {
@@ -164,8 +209,8 @@
         // Controls
         document.addEventListener('keydown', (e) => {
             if (gameOver) return;
-            if(e.key === 'ArrowLeft') player.dx = -5;
-            if(e.key === 'ArrowRight') player.dx = 5;
+            if(e.key === 'ArrowLeft') player.dx = -PlayerConfig.speed;
+            if(e.key === 'ArrowRight') player.dx = PlayerConfig.speed;
             if(e.key === ' ') {
                 player.bullets.push({
                     x: player.x,
