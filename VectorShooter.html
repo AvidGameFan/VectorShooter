@@ -206,7 +206,17 @@
                 enemies.push({
                     x: Math.random() * canvas.width,
                     y: 0,
-                    type: currentLevelConfig.enemyType
+                    type: currentLevelConfig.enemyType,
+                    // Add movement properties
+                    dx: 0,  // Horizontal movement
+                    dy: currentLevelConfig.enemyType.name === 'Circle' ? 2 : 0,  // Initial downward velocity for circles
+                    bounceCount: 0,  // For circle bouncing
+                    maxBounces: Math.floor(Math.random() * 3) + 1,  // Random number of bounces (1-3)
+                    gravity: 0.2,  // Gravity for circle bouncing
+                    diagonalMovement: currentLevelConfig.enemyType.name === 'Diamond' ? Math.random() < 0.3 : false,  // 30% chance to start with diagonal movement
+                    diagonalDirection: Math.random() < 0.5 ? -1 : 1,  // Random direction for diagonal movement
+                    diagonalSpeed: 2 + Math.random() * 2,  // Random diagonal speed
+                    movementSwitchChance: 0.003  // Chance to switch movement type each frame
                 });
             }
 
@@ -219,7 +229,69 @@
                     enemies.splice(i, 1);
                     continue;
                 }
-                enemy.y += enemy.type.speed;
+
+                // Update enemy position based on type
+                switch(enemy.type.name) {
+                    case 'Circle':
+                        // Apply gravity and update position
+                        enemy.dy += enemy.gravity;
+                        enemy.y += enemy.dy;
+                        
+                        // Bounce when hitting bottom
+                        if(enemy.y > canvas.height) {
+                            if(enemy.bounceCount < enemy.maxBounces) {
+                                enemy.y = canvas.height;
+                                enemy.dy = -12 - Math.random() * 3;  // Slightly reduced upward velocity
+                                enemy.bounceCount++;
+                            } else {
+                                enemies.splice(i, 1);
+                                continue;
+                            }
+                        }
+                        break;
+
+                    case 'Diamond':
+                        // Random chance to switch movement type
+                        if(Math.random() < enemy.movementSwitchChance) {
+                            enemy.diagonalMovement = !enemy.diagonalMovement;
+                            if(enemy.diagonalMovement) {
+                                enemy.diagonalDirection = Math.random() < 0.5 ? -1 : 1;  // New random direction when switching to diagonal
+                            }
+                        }
+                        
+                        if(enemy.diagonalMovement) {
+                            // Diagonal movement
+                            enemy.y += enemy.type.speed;
+                            enemy.x += enemy.diagonalDirection * enemy.diagonalSpeed;
+                            
+                            // Bounce off screen edges
+                            if(enemy.x < 0 || enemy.x > canvas.width) {
+                                enemy.diagonalDirection *= -1;
+                            }
+                        } else {
+                            // Normal falling movement
+                            enemy.y += enemy.type.speed;
+                        }
+                        
+                        // Remove if off screen
+                        if(enemy.y > canvas.height) {
+                            enemies.splice(i, 1);
+                            continue;
+                        }
+                        break;
+
+                    case 'Square':
+                        // Normal falling movement with slight wobble
+                        enemy.y += enemy.type.speed;
+                        enemy.x += Math.sin(enemy.y / 20) * 0.5;  // Gentle side-to-side wobble
+                        
+                        // Remove if off screen
+                        if(enemy.y > canvas.height) {
+                            enemies.splice(i, 1);
+                            continue;
+                        }
+                        break;
+                }
 
                 // Check collision with player
                 if (!player.invulnerable && 
@@ -276,12 +348,6 @@
                         }
                         break;
                     }
-                }
-
-                // Remove enemies that are off screen
-                if(enemy.y > canvas.height) {
-                    enemies.splice(i, 1);
-                    continue;
                 }
 
                 // Draw enemy using its type's draw function
