@@ -6,6 +6,8 @@
         canvas {
             border: 1px solid #333;
             background: black;
+            margin: 20px auto;
+            display: block;
         }
         #gameInfo {
             color: white;
@@ -29,6 +31,8 @@
             flex-direction: column;
             align-items: center;
             background: #000;
+            min-height: 100vh;
+            justify-content: center;
         }
     </style>
 </head>
@@ -110,7 +114,7 @@
             }
 
             // Spawn enemies based on current level
-            const currentLevelConfig = Levels[currentLevel];
+            const currentLevelConfig = Levels[currentLevel % Levels.length];
             if(Math.random() < currentLevelConfig.spawnRate) {
                 // Ensure we have a valid enemy type
                 if (!currentLevelConfig || !currentLevelConfig.enemyType) {
@@ -166,14 +170,24 @@
                         
                         // Check if level is complete
                         if (enemiesEliminated >= currentLevelConfig.enemiesToEliminate) {
-                            if (currentLevel < Levels.length - 1) {
-                                currentLevel++;
-                                enemiesEliminated = 0;
-                                enemies.length = 0; // Clear remaining enemies
-                            } else {
-                                // Game completed
-                                gameOver = true;
-                            }
+                            // Calculate next level with increasing difficulty
+                            currentLevel++;
+                            enemiesEliminated = 0;
+                            enemies.length = 0; // Clear remaining enemies
+                            
+                            // Adjust difficulty based on level
+                            const baseEnemies = 10;
+                            const baseSpawnRate = 0.02;
+                            const difficultyMultiplier = 1 + (currentLevel * 0.1); // 10% increase per level
+                            
+                            // Get the next level configuration using modulo
+                            const nextLevelIndex = currentLevel % Levels.length;
+                            const nextLevelConfig = Levels[nextLevelIndex];
+                            
+                            // Update level configuration
+                            nextLevelConfig.enemiesToEliminate = Math.floor(baseEnemies * difficultyMultiplier);
+                            nextLevelConfig.spawnRate = baseSpawnRate * difficultyMultiplier;
+                            nextLevelConfig.description = `Level ${currentLevel + 1}: ${nextLevelConfig.enemyType.name} Invasion`;
                         }
                         break;
                     }
